@@ -1,0 +1,92 @@
+name: Local lab experiments
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: Scenario
+        type: choice
+        options: [cpu, database, both]
+        default: cpu
+      mode:
+        description: Smoke checks plumbing; calibrate before full measurements
+        type: choice
+        options: [smoke, calibration, full]
+        default: smoke
+      rate:
+        description: Requests/second override (1–100; blank uses profile)
+        type: string
+      seed_rows:
+        description: Seed rows override (1–2000000)
+        type: string
+      cpu_work:
+        description: Hash iterations/request override (0–10000000)
+        type: string
+      seconds:
+        description: Measurement duration override (30–900 seconds)
+        type: string
+      repeats:
+        description: Repeat count override (1–10)
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  experiment:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      SCENARIO: ${{ inputs.scenario }}
+      MODE: ${{ inputs.mode }}
+      RATE: ${{ inputs.rate }}
+      SEED_ROWS: ${{ inputs.seed_rows }}
+      CPU_WORK: ${{ inputs.cpu_work }}
+      SECONDS_PER_RUN: ${{ inputs.seconds }}
+      REPEATS: ${{ inputs.repeats }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install pinned lab tools
+        shell: bash
+        run: |
+          tools="$RUNNER_TEMP/lab-tools"
+          mkdir -p "$tools"
+          curl -fsSL --retry 3 https://kind.sigs.k8s.io/dl/v0.33.0/kind-linux-amd64 -o "$tools/kind"
+          curl -fsSL --retry 3 https://dl.k8s.io/release/v1.35.0/bin/linux/amd64/kubectl -o "$tools/kubectl"
+          curl -fsSL --retry 3 https://github.com/grafana/k6/releases/download/v2.4.0/k6-v2.4.0-linux-amd64.tar.gz -o "$RUNNER_TEMP/k6.tar.gz"
+          tar -xzf "$RUNNER_TEMP/k6.tar.gz" --strip-components=1 -C "$tools" k6-v2.4.0-linux-amd64/k6
+          chmod +x "$tools/kind" "$tools/kubectl" "$tools/k6"
+          echo "$tools" >> "$GITHUB_PATH"
+      - name: Build and check environment
+        run: |
+          mkdir -p results/ci
+          make build
+          bash scripts/preflight.sh > results/ci/preflight.txt 2>&1
+      - name: Create lab
+        shell: bash
+        run: bash scripts/cluster-up.sh 2>&1 | tee results/ci/setup.log
+      - name: Run selected profile
+        shell: bash
+        run: |
+          status=0
+          for scenario in cpu database; do
+            if [[ "$SCENARIO" == both || "$SCENARIO" == "$scenario" ]]; then
+              bash scripts/run-suite.sh "$scenario" "results/ci/$scenario" "$MODE" \
+                >"results/ci/$scenario.log" 2>&1 || status=1
+            fi
+          done
+          exit "$status"
+      - name: Collect diagnostics even after failure
+        if: always()
+        run: bash scripts/collect-diagnostics.sh results/ci/final
+      - name: Upload reports, telemetry and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scalens-${{ inputs.scenario }}-${{ inputs.mode }}-${{ github.run_id }}
+          path: results/ci/
+          retention-days: 14
+          if-no-files-found: warn

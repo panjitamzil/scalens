@@ -1,0 +1,38 @@
+name: scalens
+services:
+  postgres:
+    image: postgres:18.1-alpine
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "shared_buffers=64MB", "-c", "max_connections=60", "-c", "max_parallel_workers_per_gather=0"]
+    environment:
+      POSTGRES_USER: scalens
+      POSTGRES_PASSWORD: scalens
+      POSTGRES_DB: scalens
+    ports: ["127.0.0.1:15432:5432"]
+    volumes:
+      - ../../database/migrations/001_orders.sql:/docker-entrypoint-initdb.d/001_orders.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U scalens -d scalens"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    mem_limit: 384m
+  payment:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args: { SERVICE: payment-service }
+    ports: ["127.0.0.1:18081:8081"]
+    mem_limit: 96m
+  order:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args: { SERVICE: order-service }
+    environment:
+      DATABASE_URL: postgres://scalens:scalens@postgres:5432/scalens?sslmode=disable
+      PAYMENT_URL: http://payment:8081
+    depends_on:
+      postgres: { condition: service_healthy }
+      payment: { condition: service_started }
+    ports: ["127.0.0.1:18080:8080"]
+    mem_limit: 128m

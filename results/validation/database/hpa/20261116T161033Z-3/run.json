@@ -1,0 +1,31 @@
+{
+  "schema_version": "1",
+  "id": "20261116T161033Z-3",
+  "scenario": "database",
+  "arm": "hpa",
+  "block": 3,
+  "rate": 20,
+  "seconds": 120,
+  "rows": 600000,
+  "profile": "constant",
+  "resource_profile": "m2-local-v2-work-0",
+  "scale_replicas": 2,
+  "validity": "contended",
+  "reasons": [
+    "k6 dropped iterations",
+    "host swapouts increased by more than 1024 pages"
+  ],
+  "start": "2026-11-16T16:11:13Z",
+  "end": "2026-11-16T16:13:21Z",
+  "stats": {
+    "duration_seconds": 128.020254,
+    "requests": 2259,
+    "successes": 7,
+    "error_rate": 0.9969012837538734,
+    "slo_bad_rate": 0.9977866312527667,
+    "success_p95_ms": 5158.1264,
+    "success_p99_ms": 5167.74608,
+    "failure_p95_ms": 8015.0339,
+    "dropped_iterations": 142
+  }
+}

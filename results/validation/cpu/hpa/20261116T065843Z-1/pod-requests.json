@@ -1,0 +1,10 @@
+[
+  {
+    "pod": "order-service-649fcd5b5f-whc52",
+    "requests": 1285.63229385881
+  },
+  {
+    "pod": "order-service-649fcd5b5f-vgm55",
+    "requests": 868.6805125464505
+  }
+]

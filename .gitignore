@@ -1,0 +1,8 @@
+bin/
+.env
+results/*
+!results/README.md
+!results/validation/
+*.test
+coverage.out
+__pycache__/

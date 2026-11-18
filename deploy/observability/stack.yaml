@@ -1,0 +1,140 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: observer, namespace: scalens}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: scalens-observer}
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "nodes/proxy", "pods", "services", "endpoints", "namespaces", "persistentvolumes", "persistentvolumeclaims", "replicationcontrollers", "resourcequotas", "limitranges"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps", "batch", "autoscaling", "policy", "networking.k8s.io", "storage.k8s.io"]
+    resources: ["deployments", "replicasets", "statefulsets", "daemonsets", "jobs", "cronjobs", "horizontalpodautoscalers", "poddisruptionbudgets", "ingresses", "networkpolicies", "storageclasses", "volumeattachments"]
+    verbs: ["get", "list", "watch"]
+  - nonResourceURLs: ["/metrics"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: scalens-observer}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: scalens-observer}
+subjects: [{kind: ServiceAccount, name: observer, namespace: scalens}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: prometheus, namespace: scalens}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: prometheus}}
+  template:
+    metadata: {labels: {app: prometheus}}
+    spec:
+      serviceAccountName: observer
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v3.7.3
+          args: ["--config.file=/etc/prometheus/prometheus.yaml", "--storage.tsdb.retention.time=4h", "--storage.tsdb.retention.size=256MB"]
+          ports: [{containerPort: 9090}]
+          readinessProbe: {httpGet: {path: /-/ready, port: 9090}}
+          resources:
+            requests: {cpu: 100m, memory: 192Mi}
+            limits: {memory: 512Mi}
+          volumeMounts: [{name: config, mountPath: /etc/prometheus}]
+      volumes: [{name: config, configMap: {name: prometheus-config}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: prometheus, namespace: scalens}
+spec:
+  type: NodePort
+  selector: {app: prometheus}
+  ports: [{port: 9090, nodePort: 30090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: tempo, namespace: scalens}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: tempo}}
+  template:
+    metadata: {labels: {app: tempo}}
+    spec:
+      containers:
+        - name: tempo
+          image: grafana/tempo:2.9.0
+          args: ["-config.file=/etc/tempo/tempo.yaml"]
+          env:
+            - {name: GOMEMLIMIT, value: "384MiB"}
+          ports: [{containerPort: 3200}, {containerPort: 4318}]
+          readinessProbe: {httpGet: {path: /ready, port: 3200}, initialDelaySeconds: 15}
+          resources:
+            requests: {cpu: 100m, memory: 192Mi}
+            limits: {memory: 768Mi}
+          volumeMounts: [{name: config, mountPath: /etc/tempo}]
+      volumes: [{name: config, configMap: {name: tempo-config}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: tempo, namespace: scalens}
+spec:
+  type: NodePort
+  selector: {app: tempo}
+  ports:
+    - {name: query, port: 3200, nodePort: 30320}
+    - {name: otlp, port: 4318}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: kube-state-metrics, namespace: scalens}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: kube-state-metrics}}
+  template:
+    metadata: {labels: {app: kube-state-metrics}}
+    spec:
+      serviceAccountName: observer
+      containers:
+        - name: kube-state-metrics
+          image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.17.0
+          args: ["--resources=pods,deployments,horizontalpodautoscalers,nodes"]
+          ports: [{containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /healthz, port: 8080}}
+          resources:
+            requests: {cpu: 20m, memory: 32Mi}
+            limits: {memory: 96Mi}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: kube-state-metrics, namespace: scalens}
+spec:
+  selector: {app: kube-state-metrics}
+  ports: [{port: 8080}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: postgres-exporter, namespace: scalens}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: postgres-exporter}}
+  template:
+    metadata: {labels: {app: postgres-exporter}}
+    spec:
+      containers:
+        - name: postgres-exporter
+          image: quay.io/prometheuscommunity/postgres-exporter:v0.18.1
+          args: ["--collector.stat_statements"]
+          env:
+            - {name: DATA_SOURCE_NAME, value: "postgresql://scalens_monitor:scalens_monitor@postgres:5432/scalens?sslmode=disable"}
+          ports: [{containerPort: 9187}]
+          readinessProbe: {httpGet: {path: /metrics, port: 9187}}
+          resources:
+            requests: {cpu: 20m, memory: 32Mi}
+            limits: {memory: 96Mi}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: postgres-exporter, namespace: scalens}
+spec:
+  selector: {app: postgres-exporter}
+  ports: [{port: 9187}]

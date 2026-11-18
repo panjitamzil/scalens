@@ -1,0 +1,18 @@
+{
+  "prometheus": "http://localhost:9090",
+  "tempo": "http://localhost:3200",
+  "namespace": "scalens",
+  "trace_limit": 30,
+  "cpu_near_limit": 0.8,
+  "db_user": "scalens",
+  "rules": {
+    "min_requests": 30,
+    "latency_increase": 1.5,
+    "error_rate": 0.01,
+    "slo_bad_rate": 0.05,
+    "cpu_fraction": 0.6,
+    "query_seconds": 0.05,
+    "server_query_seconds": 0.01
+  },
+  "queries": {}
+}

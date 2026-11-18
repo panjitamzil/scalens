@@ -1,0 +1,31 @@
+{
+  "schema_version": "1",
+  "id": "20261116T065843Z-1",
+  "scenario": "cpu",
+  "arm": "hpa",
+  "block": 1,
+  "rate": 20,
+  "seconds": 120,
+  "rows": 200000,
+  "profile": "constant",
+  "resource_profile": "m2-local-v2-work-500000",
+  "scale_replicas": 2,
+  "validity": "contended",
+  "reasons": [
+    "k6 dropped iterations",
+    "host swapouts increased by more than 1024 pages"
+  ],
+  "start": "2026-11-16T06:59:56Z",
+  "end": "2026-11-16T07:01:58Z",
+  "stats": {
+    "duration_seconds": 120.05603599999999,
+    "requests": 2251,
+    "successes": 1835,
+    "error_rate": 0.18480675255442025,
+    "slo_bad_rate": 0.47401155042203463,
+    "success_p95_ms": 7685.070099999997,
+    "success_p99_ms": 8490.41974,
+    "failure_p95_ms": 9003.89,
+    "dropped_iterations": 149
+  }
+}

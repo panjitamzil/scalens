@@ -1,0 +1,22 @@
+name: Go
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: test -z "$(gofmt -l cmd internal services tests)"
+      - run: go vet ./...
+      - run: go test -race ./...
+      - run: python3 -m unittest discover -s tests -p 'test_*.py'
+      - run: make build
+      - run: docker compose -f deploy/docker/compose.yaml up -d --wait postgres
+      - run: make integration
+      - if: always()
+        run: docker compose -f deploy/docker/compose.yaml down
